@@ -1020,6 +1020,220 @@ bool imencode( const String& ext, InputArray _image,
     return code;
 }
 
+bool imdecodemulti( InputArray _buf, std::vector<Mat>& mats, int flags )
+{
+    CV_TRACE_FUNCTION();
+
+    Mat buf = _buf.getMat();
+
+    CV_Assert(!buf.empty());
+    CV_Assert(buf.isContinuous());
+    CV_Assert(buf.checkVector(1, CV_8U) > 0);
+    Mat buf_row = buf.reshape(1, 1);  // decoders expects single row, avoid issues with vector columns
+
+    ImageDecoder decoder = findDecoder( buf_row );
+    if( !decoder )
+        return 0;
+
+    int start = 0;
+    int count = std::numeric_limits<int>::max();
+
+    String filename = tempfile();
+    FILE* f = fopen( filename.c_str(), "wb" );
+    if( !f )
+        return 0;
+    size_t bufSize = buf_row.total() * buf.elemSize();
+    if (fwrite(buf_row.ptr(), 1, bufSize, f) != bufSize)
+    {
+        fclose( f );
+        CV_Error( Error::StsError, "Failed to write image data to temporary file." );
+    }
+    if( fclose(f) != 0 )
+    {
+        CV_Error( Error::StsError, "Failed to write image data to temporary file." );
+    }
+    decoder->setSource( filename );
+
+    bool success = false;
+    try
+    {
+        if (decoder->readHeader())
+            success = true;
+    }
+    catch (const cv::Exception& e)
+    {
+        std::cerr << "imdecodemulti_('" << filename << "'): can't read header: " << e.what() << std::endl << std::flush;
+    }
+    catch (...)
+    {
+        std::cerr << "imdecodemulti_('" << filename << "'): can't read header: unknown exception" << std::endl << std::flush;
+    }
+    if (!success)
+    {
+        decoder.release();
+        if (!filename.empty())
+        {
+            if (0 != remove(filename.c_str()))
+            {
+                std::cerr << "unable to remove temporary file:" << filename << std::endl << std::flush;
+            }
+        }
+        return 0;
+    }
+
+    int current = start;
+
+    while (current > 0)
+    {
+        if (!decoder->nextPage())
+        {
+            return false;
+        }
+        --current;
+    }
+
+    while (current < count)
+    {
+        // grab the decoded type
+        int type = decoder->type();
+        if ((flags & IMREAD_LOAD_GDAL) != IMREAD_LOAD_GDAL && flags != IMREAD_UNCHANGED)
+        {
+            if ((flags & IMREAD_ANYDEPTH) == 0)
+                type = CV_MAKETYPE(CV_8U, CV_MAT_CN(type));
+
+            if ((flags & CV_LOAD_IMAGE_COLOR) != 0 ||
+                ((flags & IMREAD_ANYCOLOR) != 0 && CV_MAT_CN(type) > 1))
+                type = CV_MAKETYPE(CV_MAT_DEPTH(type), 3);
+            else
+                type = CV_MAKETYPE(CV_MAT_DEPTH(type), 1);
+        }
+
+        // established the required input image size
+        Size size = validateInputImageSize(Size(decoder->width(), decoder->height()));
+
+        // read the image data
+        Mat mat(size.height, size.width, type);
+
+        success = false;
+        try
+        {
+            if (decoder->readData(mat))
+                success = true;
+        }
+        catch (const cv::Exception& e)
+        {
+            std::cerr << "imdecodemulti_('" << filename << "'): can't read data: " << e.what() << std::endl << std::flush;
+        }
+        catch (...)
+        {
+            std::cerr << "imdecodemulti_('" << filename << "'): can't read data: unknown exception" << std::endl << std::flush;
+        }
+
+        if (!success)
+        {
+            mat.release();
+            break;
+        }
+
+        // optionally rotate the data if EXIF' orientation flag says so
+        if ((flags & IMREAD_IGNORE_ORIENTATION) == 0 && flags != IMREAD_UNCHANGED)
+        {
+            ApplyExifOrientation(decoder->getExifTag(ORIENTATION), mat);
+        }
+
+        mats.push_back(mat);
+        if (!decoder->nextPage())
+        {
+            break;
+        }
+        ++current;
+    }
+
+    decoder.release();
+    if (!filename.empty())
+    {
+        if (0 != remove(filename.c_str()))
+        {
+            std::cerr << "unable to remove temporary file:" << filename << std::endl << std::flush;
+        }
+    }
+
+    return !mats.empty();
+}
+
+bool imencodemulti( const String& ext, InputArray _image,
+               std::vector<uchar>& buf, const std::vector<int>& params )
+{
+    CV_TRACE_FUNCTION();
+
+    CV_Assert(!_image.empty());
+
+    std::vector<Mat> img_vec;
+    if (_image.isMatVector() || _image.isUMatVector())
+        _image.getMatVector(img_vec);
+    else
+        img_vec.push_back(_image.getMat());
+
+    CV_Assert(!img_vec.empty());
+
+    bool isMultiImg = img_vec.size() > 1;
+    std::vector<Mat> write_vec;
+
+    ImageEncoder encoder = findEncoder( ext );
+    if( !encoder )
+        CV_Error( Error::StsError, "Could not find a writer for the specified extension." );
+
+    for (size_t page = 0; page < img_vec.size(); page++)
+    {
+        Mat image = img_vec[page];
+        CV_Assert(!image.empty());
+
+        CV_Assert( image.channels() == 1 || image.channels() == 3 || image.channels() == 4 );
+
+        Mat temp;
+        if( !encoder->isFormatSupported(image.depth()) )
+        {
+            CV_Assert( encoder->isFormatSupported(CV_8U) );
+            image.convertTo( temp, CV_8U );
+            image = temp;
+        }
+
+        write_vec.push_back(image);
+    }
+
+    bool code = false;
+    if( encoder->setDestination( buf ) && !isMultiImg )
+    {
+        code = encoder->write( write_vec[0], params );
+        encoder->throwOnEror();
+        CV_Assert( code );
+    }
+    else
+    {
+        String filename = tempfile();
+        code = encoder->setDestination(filename);
+        CV_Assert( code );
+
+        if (!isMultiImg)
+            code = encoder->write( write_vec[0], params );
+        else
+            code = encoder->writemulti( write_vec, params ); //to be implemented
+        encoder->throwOnEror();
+        CV_Assert( code );
+
+        FILE* f = fopen( filename.c_str(), "rb" );
+        CV_Assert(f != 0);
+        fseek( f, 0, SEEK_END );
+        long pos = ftell(f);
+        buf.resize((size_t)pos);
+        fseek( f, 0, SEEK_SET );
+        buf.resize(fread( &buf[0], 1, buf.size(), f ));
+        fclose(f);
+        remove(filename.c_str());
+    }
+    return code;
+}
+
 bool haveImageReader( const String& filename )
 {
     ImageDecoder decoder = cv::findDecoder(filename);

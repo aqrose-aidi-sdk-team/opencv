@@ -310,6 +310,12 @@ CV_EXPORTS_W bool imencode( const String& ext, InputArray img,
                             CV_OUT std::vector<uchar>& buf,
                             const std::vector<int>& params = std::vector<int>());
 
+CV_EXPORTS_W bool imdecodemulti( InputArray buf, CV_OUT std::vector<Mat>& mats, int flags );
+
+CV_EXPORTS_W bool imencodemulti( const String& ext, InputArrayOfArrays img,
+                            CV_OUT std::vector<uchar>& buf,
+                            const std::vector<int>& params = std::vector<int>());
+
 /** @brief Returns true if the specified image can be decoded by OpenCV
 
 @param filename File name of the image
