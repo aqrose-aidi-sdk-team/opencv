@@ -340,6 +340,10 @@ See cv::imreadmulti for the list of supported formats and flags description.
 */
 CV_EXPORTS_W bool imdecodemulti(InputArray buf, int flags, CV_OUT std::vector<Mat>& mats);
 
+CV_EXPORTS_W bool imencodemulti( const String& ext, InputArrayOfArrays img,
+                            CV_OUT std::vector<uchar>& buf,
+                            const std::vector<int>& params = std::vector<int>());
+
 /** @brief Encodes an image into a memory buffer.
 
 The function imencode compresses the image and stores it in the memory buffer that is resized to fit the

@@ -1104,6 +1104,79 @@ bool imdecodemulti(InputArray _buf, int flags, CV_OUT std::vector<Mat>& mats)
     return imdecodemulti_(buf, flags, mats, 0, -1);
 }
 
+bool imencodemulti( const String& ext, InputArray _image,
+               std::vector<uchar>& buf, const std::vector<int>& params )
+{
+    CV_TRACE_FUNCTION();
+
+    CV_Assert(!_image.empty());
+
+    std::vector<Mat> img_vec;
+    if (_image.isMatVector() || _image.isUMatVector())
+        _image.getMatVector(img_vec);
+    else
+        img_vec.push_back(_image.getMat());
+
+    CV_Assert(!img_vec.empty());
+
+    bool isMultiImg = img_vec.size() > 1;
+    std::vector<Mat> write_vec;
+
+    ImageEncoder encoder = findEncoder( ext );
+    if( !encoder )
+        CV_Error( Error::StsError, "Could not find a writer for the specified extension." );
+
+    for (size_t page = 0; page < img_vec.size(); page++)
+    {
+        Mat image = img_vec[page];
+        CV_Assert(!image.empty());
+
+        CV_Assert( image.channels() == 1 || image.channels() == 3 || image.channels() == 4 );
+
+        Mat temp;
+        if( !encoder->isFormatSupported(image.depth()) )
+        {
+            CV_Assert( encoder->isFormatSupported(CV_8U) );
+            image.convertTo( temp, CV_8U );
+            image = temp;
+        }
+
+        write_vec.push_back(image);
+    }
+
+    bool code = false;
+    if( encoder->setDestination( buf ) && !isMultiImg )
+    {
+        code = encoder->write( write_vec[0], params );
+        encoder->throwOnEror();
+        CV_Assert( code );
+    }
+    else
+    {
+        String filename = tempfile();
+        code = encoder->setDestination(filename);
+        CV_Assert( code );
+
+        if (!isMultiImg)
+            code = encoder->write( write_vec[0], params );
+        else
+            code = encoder->writemulti( write_vec, params ); //to be implemented
+        encoder->throwOnEror();
+        CV_Assert( code );
+
+        FILE* f = fopen( filename.c_str(), "rb" );
+        CV_Assert(f != 0);
+        fseek( f, 0, SEEK_END );
+        long pos = ftell(f);
+        buf.resize((size_t)pos);
+        fseek( f, 0, SEEK_SET );
+        buf.resize(fread( &buf[0], 1, buf.size(), f ));
+        fclose(f);
+        remove(filename.c_str());
+    }
+    return code;
+}
+
 bool imencode( const String& ext, InputArray _image,
                std::vector<uchar>& buf, const std::vector<int>& params_ )
 {
