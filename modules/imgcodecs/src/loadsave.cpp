@@ -52,6 +52,7 @@
 #include <iostream>
 #include <fstream>
 #include <cerrno>
+#include <thread>
 #include <opencv2/core/utils/logger.hpp>
 #include <opencv2/core/utils/configuration.private.hpp>
 #include <opencv2/imgcodecs.hpp>
