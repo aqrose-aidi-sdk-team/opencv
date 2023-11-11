@@ -970,6 +970,10 @@ imdecodemulti_(const Mat& buf, int flags, std::vector<Mat>& mats, int start, int
     if (!decoder->setSource(buf_row))
     {
         filename = tempfile();
+        std::thread::id thread_id = std::this_thread::get_id();
+        std::ostringstream oss;
+        oss << thread_id;
+        filename += oss.str();
         FILE* f = fopen(filename.c_str(), "wb");
         if (!f)
             return 0;
