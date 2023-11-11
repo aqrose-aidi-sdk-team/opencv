@@ -1084,8 +1084,6 @@ String tempfile( const char* suffix )
     const char *temp_dir = getenv("OPENCV_TEMP_PATH");
 #endif
 
-    const int thread_id = utils::getThreadID();
-
 #if defined _WIN32
 #ifdef WINRT
     RoInitialize(RO_INIT_MULTITHREADED);
@@ -1110,7 +1108,7 @@ String tempfile( const char* suffix )
 
     ::GetTempPathW(kMaxPathSize, temp_dir);
 
-    if(0 != ::GetTempFileNameW(temp_dir, L"ocv", thread_id, temp_file)) {
+    if(0 != ::GetTempFileNameW(temp_dir, L"ocv", 0, temp_file)) {
         DeleteFileW(temp_file);
         char aname[MAX_PATH];
         size_t copied = wcstombs(aname, temp_file, MAX_PATH);
@@ -1126,7 +1124,7 @@ String tempfile( const char* suffix )
         ::GetTempPathA(sizeof(temp_dir2), temp_dir2);
         temp_dir = temp_dir2;
     }
-    if(0 == ::GetTempFileNameA(temp_dir, "ocv", thread_id, temp_file))
+    if(0 == ::GetTempFileNameA(temp_dir, "ocv", 0, temp_file))
         return String();
 
     DeleteFileA(temp_file);
