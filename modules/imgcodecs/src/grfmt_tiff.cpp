@@ -1122,10 +1122,18 @@ public:
                                /*map=*/0, /*unmap=*/0 );
     }
 
-    static tmsize_t read( thandle_t /*handle*/, void* /*buffer*/, tmsize_t /*n*/ )
+    static tmsize_t read( thandle_t handle, void* buffer, tmsize_t n )
     {
-        // Not used for encoding.
-        return 0;
+        TiffEncoderBufHelper *helper = reinterpret_cast<TiffEncoderBufHelper*>(handle);
+        const std::vector<uchar>& buf = *helper->m_buf;
+        const tmsize_t size = buf.size();
+        tmsize_t pos = helper->m_buf_pos;
+
+        n = min(n, size - pos);
+        
+        memcpy(buffer, &buf[pos], n * sizeof(uchar));
+        helper->m_buf_pos += n;
+        return n;
     }
 
     static tmsize_t write( thandle_t handle, void* buffer, tmsize_t n )

@@ -1142,13 +1142,17 @@ bool imencodemulti( const String& ext, InputArray _image,
     }
 
     bool code = false;
-    if( encoder->setDestination( buf ) && !isMultiImg )
+    if( encoder->setDestination( buf ) )
     {
-        code = encoder->write( write_vec[0], params );
+        if(!isMultiImg) 
+            code = encoder->write( write_vec[0], params );
+        else 
+            code = encoder->writemulti( write_vec, params );
+
         encoder->throwOnEror();
         CV_Assert( code );
     }
-    else
+    else 
     {
         String filename = tempfile();
         std::thread::id thread_id = std::this_thread::get_id();
