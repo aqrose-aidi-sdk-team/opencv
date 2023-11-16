@@ -46,6 +46,21 @@ void PrintTo(const CV_ddtCn& val, std::ostream* os)
     *os << "C" << CV_MAT_CN(val_type);
 }
 
+TEST(Imgcodecs_Tiff, imencodemulti){
+    EXPECT_TRUE(1);
+
+    std::string tif_test_data_path = "tif_test_data.tif";
+
+    std::vector<cv::Mat> mats;
+    EXPECT_TRUE(imreadmulti(tif_test_data_path, mats));
+
+    auto buf_ptr = std::make_shared<std::vector<uchar>>();
+    EXPECT_TRUE(imencodemulti(".tif", mats, *buf_ptr));
+
+    std::vector<cv::Mat> demats;
+    EXPECT_TRUE(imdecodemulti(*buf_ptr, -1, demats));
+}
+
 #ifdef __ANDROID__
 // Test disabled as it uses a lot of memory.
 // It is killed with SIGKILL by out of memory killer.
