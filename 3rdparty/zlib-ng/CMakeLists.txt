@@ -48,7 +48,11 @@ endif()
 if(BASEARCH_ARM_FOUND)
   set(WITH_ACLE ON)
   set(WITH_NEON ON)
-  set(WITH_ARMV6 ON)
+  if(AARCH64)
+    set(WITH_ARMV6 OFF)
+  else()
+    set(WITH_ARMV6 ON)
+  endif()
 endif()
 if(BASEARCH_PPC_FOUND)
   set(WITH_ALTIVEC ON)
@@ -85,6 +89,15 @@ elseif(MSVC)
   endif()
 elseif(CMAKE_C_COMPILER_ID MATCHES "GNU" OR CMAKE_C_COMPILER_ID MATCHES "Clang")
   set(WARNFLAGS_DISABLE)
+  # Check whether -fno-lto is available
+  set(CMAKE_REQUIRED_FLAGS "-fno-lto")
+  check_c_source_compiles(
+    "int main() { return 0; }"
+    FNO_LTO_AVAILABLE FAIL_REGEX "not supported")
+  set(CMAKE_REQUIRED_FLAGS)
+  if(FNO_LTO_AVAILABLE)
+    set(ZNOLTOFLAG "-fno-lto")
+  endif()
   if(BASEARCH_ARM_FOUND)
     if(ARM AND NOT CMAKE_C_FLAGS MATCHES "-mfloat-abi")
       # Auto-detect support for ARM floating point ABI
@@ -117,14 +130,9 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "GNU" OR CMAKE_C_COMPILER_ID MATCHES "Clang")
       endif()
     endif()
   endif()
-  # Check whether -fno-lto is available
-  set(CMAKE_REQUIRED_FLAGS "-fno-lto")
-  check_c_source_compiles(
-    "int main() { return 0; }"
-    FNO_LTO_AVAILABLE FAIL_REGEX "not supported")
-  set(CMAKE_REQUIRED_FLAGS)
+  # Disable LTO unless Native Instructions are enabled
   if(FNO_LTO_AVAILABLE)
-    set(NOLTOFLAG "-fno-lto")
+    set(NOLTOFLAG ${ZNOLTOFLAG})
   endif()
   if(MINGW)
     # Add `-Wno-pedantic-ms-format` only if the toolchain supports it
@@ -248,21 +256,6 @@ check_c_source_compiles(
   HAVE_ATTRIBUTE_ALIGNED FAIL_REGEX "aligned")
 if(HAVE_ATTRIBUTE_ALIGNED)
   add_definitions(-DHAVE_ATTRIBUTE_ALIGNED)
-endif()
-
-#
-# check for _Thread_local() support in the compiler
-#
-check_c_source_compiles(
-  "_Thread_local int test;
-  int main(void) {
-      (void)test;
-      return 0;
-  }"
-  HAVE_THREAD_LOCAL
-)
-if(HAVE_THREAD_LOCAL)
-  add_definitions(-DHAVE_THREAD_LOCAL)
 endif()
 
 #
